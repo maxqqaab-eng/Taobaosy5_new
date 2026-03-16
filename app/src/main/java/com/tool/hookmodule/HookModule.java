@@ -24,7 +24,9 @@ public class HookModule implements IXposedHookLoadPackage {
     private final Map<String, Long> processedCache = new HashMap<>();
 
     // 淘宝的固定URL
-    private static final String TAOBAO_TARGET_URL = "http://ma.132.tv:3079/api/rwb/action=item_upload?apikey=ZV63UZRACUUIMF1X&uuid=3880294&itemId=663120907804&username=芝麻公司_2组&ids=ksdhfkd&pt=淘宝&fs=0";
+    public static  String TAOBAO_尾缀 = "apikey=ZV63UZRACUUIMF1X&uuid=3880294&itemId=663120907804&username=芝麻公司_2组&ids=ksdhfkd&pt=淘宝&fs=0";
+    public static  String TAOBAO_TARGET_URL = "http://ma.132.tv:3079/api/rwb/action=item_upload?"+TAOBAO_尾缀;
+
 
     // 拼多多的固定URL
     private static final String PINDUODUO_TARGET_URL = "http://ma.132.tv:3079/api/rwb/action=item_upload?apikey=YOUR_API_KEY&uuid=YOUR_UUID&itemId=YOUR_ITEM_ID&username=YOUR_NAME&ids=YOUR_IDS&pt=拼多多&fs=0";

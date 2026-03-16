@@ -38,6 +38,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView 变量_权限状态文本;
     private TextView 变量_模块状态文本;
     private TextView 变量_配置列表文本;
+    private TextView 变量_API配置文本; // 修正：去掉空格
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,6 +49,7 @@ public class MainActivity extends AppCompatActivity {
         变量_权限状态文本 = findViewById(R.id.tv_permission_status);
         变量_模块状态文本 = findViewById(R.id.tv_module_status);
         变量_配置列表文本 = findViewById(R.id.tv_config_list);
+        变量_API配置文本 = findViewById(R.id.tv_api_config); // 修正：变量名一致
         Button 变量_刷新按钮 = findViewById(R.id.btn_refresh);
         Button 变量_创建示例按钮 = findViewById(R.id.btn_create_sample);
 
@@ -55,23 +57,41 @@ public class MainActivity extends AppCompatActivity {
         变量_创建示例按钮.setOnClickListener(v -> createSampleConfigs());
 
         // 显示设备序列号和权限状态
-        显示设备信息 ();
+        显示设备信息();
 
         // 请求存储权限
         requestStoragePermission();
 
         // 刷新状态
         refreshConfigStatus();
+
+        // 显示 API 配置
+        显示API配置();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        显示设备信息 ();
+        显示设备信息();
         refreshConfigStatus();
+        显示API配置();
     }
 
-    private void 显示设备信息 () {
+    private void 显示API配置 () {
+        try {
+            StringBuilder 变量_配置信息 = new StringBuilder();
+
+            // 直接从 HookModule 获取全局变量
+            //String 变量_淘宝尾缀 = HookModule.TAOBAO_尾缀;
+            String 变量_淘宝尾缀 = "测试";
+            变量_配置信息.append("🔑 淘宝尾缀：\n").append(变量_淘宝尾缀);
+            变量_API配置文本.setText(变量_配置信息.toString());
+        } catch (Exception e) {
+            变量_API配置文本.setText("❌ 读取失败：" + e.getMessage());
+        }
+    }
+
+    private void 显示设备信息() {
         // 获取设备序列号
         String 变量_序列号 = Build.SERIAL;
         if (变量_序列号 == null || 变量_序列号.isEmpty() || "unknown".equals(变量_序列号)) {
@@ -83,7 +103,7 @@ public class MainActivity extends AppCompatActivity {
         StringBuilder 变量_权限状态 = new StringBuilder();
         boolean 变量_有读权限 = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
         boolean 变量_有写权限 = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             boolean 变量_有管理权限 = Environment.isExternalStorageManager();
             变量_权限状态.append("⚙️ 存储权限：");
@@ -108,7 +128,7 @@ public class MainActivity extends AppCompatActivity {
                 变量_权限状态文本.setTextColor(0xFFE65100);
             }
         }
-        
+
         变量_权限状态文本.setText(变量_权限状态.toString());
     }
 
@@ -122,8 +142,6 @@ public class MainActivity extends AppCompatActivity {
                     intent.setData(android.net.Uri.parse("package:" + getPackageName()));
                     startActivity(intent);
                 } catch (Exception e) {
-                    
-
                     android.content.Intent intent = new android.content.Intent(
                             android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
                     startActivity(intent);
@@ -161,8 +179,8 @@ public class MainActivity extends AppCompatActivity {
         int 变量_配置总数 = 0;
 
         for (int 变量_p = 0; 变量_p < 变量_支持的包名.length; 变量_p++) {
-            String 变量_包名 = 变量_支持的包名 [变量_p];
-            String 变量_标签 = 变量_包名标签 [变量_p];
+            String 变量_包名 = 变量_支持的包名[变量_p];
+            String 变量_标签 = 变量_包名标签[变量_p];
             boolean 变量_是否有配置 = false;
 
             变量_内容构建器.append(变量_标签).append("：\n");
@@ -225,7 +243,7 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "✅ 示例配置文件已创建到 " + 变量_配置目录 + "\n请修改为实际参数值", Toast.LENGTH_LONG).show();
             refreshConfigStatus();
         } catch (Exception e) {
-            Toast.makeText(this, "❌ 创建失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "❌ 생성 실패: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -236,7 +254,7 @@ public class MainActivity extends AppCompatActivity {
             reader.close();
             return line != null ? line.trim() : "";
         } catch (Exception e) {
-            return "读取失败：" + e.getMessage();
+            return "읽기 실패: " + e.getMessage();
         }
     }
 
@@ -244,9 +262,5 @@ public class MainActivity extends AppCompatActivity {
         FileWriter writer = new FileWriter(file);
         writer.write(content);
         writer.close();
-
-
-
-
     }
 }
