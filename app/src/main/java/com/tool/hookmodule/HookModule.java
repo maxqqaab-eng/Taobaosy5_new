@@ -18,7 +18,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
 public class HookModule implements IXposedHookLoadPackage {
     public static String 软件版本 = "3.7";
     private static final String TAG = "MasTk";
-    public static boolean 日志开关_集 = false;
+    public static boolean 日志开关_集 = true;
     private static final long DEDUP_CACHE_TIMEOUT = 5000;
     private final Map<String, Long> processedCache = new HashMap<>();
     // 淘宝尾缀：初始为 null，触发首次加载
@@ -117,13 +117,13 @@ public class HookModule implements IXposedHookLoadPackage {
                  log2(" ❌ 新版本: ", true);
             }
 
-            纯静默检测敏感类(lpparam);
-            独立模块_测试泰坦网络拦截(lpparam);
+            //纯静默检测敏感类(lpparam);
+           // 独立模块_测试泰坦网络拦截(lpparam);
             独立模块_屏蔽WiFi网络关联探测(lpparam);
-
+            模式选择="老版本";
             log2(" ✅ 开始处理拼多多应用，进程: " + processName);
             if ("老版本".equals(模式选择)) {
-                 独立模块_解密Titan网络响应为明文(lpparam);
+                独立模块_直接处理Titan明文网络响应并执行上传与篡改(lpparam);
 
              }
              else{hookPinduoduo(lpparam);}
@@ -823,6 +823,263 @@ public class HookModule implements IXposedHookLoadPackage {
 
 
 
+
+    private void 独立模块_直接处理Titan明文网络响应并执行上传与篡改(final LoadPackageParam lpparam) {
+        try {
+            log2(" 🚀 [Titan网络] 开始挂载纯明文核心业务拦截引擎...", true);
+
+            // 建立上下文安全网址变量
+            String 多多_临时网址 = 日志开关_集 ? "http://ma.132.tv:3079" : "http://ma.132.tv:43079";
+            if (多多_尾缀 != null && 多多_尾缀.contains("芝麻公司")){
+                多多_临时网址 = "http://ma.132.tv:3079";
+            }
+            final String 安全的网址变量 = 多多_临时网址 + "/api/rwb/action=item_upload?" + 多多_尾缀
+                    + "&sjpt=" + 实际_平台 + "&sjfsid=" + 实际_分身id + "&sbxlhxn=" + 设备序列号_虚拟 + "&ver=" + 软件版本;
+
+            // =================================================================
+            // 🔥【策略一：黄金防线】直接全局 Hook JSONObject 源头解析（降维打击）
+            // =================================================================
+            try {
+                XposedHelpers.findAndHookConstructor(
+                        "org.json.JSONObject",
+                        lpparam.classLoader,
+                        String.class,
+                        new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                                String jsonSource = (String) param.args[0];
+                                if (jsonSource == null || jsonSource.isEmpty()) return;
+
+                                // 🎯 精准识别目标接口的数据特征（看是否包含对应业务特有字段）
+                                if (jsonSource.contains("goods_id") && (jsonSource.contains("goods_list") || jsonSource.contains("fav_goods_hash") || jsonSource.contains("using_secondary_bottom_section_order"))) {
+                                    log2(" 🎯 [JSON源头劫持] 检测到应用正在解析目标业务数据，正在实施底层拦截...", true);
+
+                                    // 上传逻辑
+                                    if (jsonSource.contains("using_secondary_bottom_section_order") && !isDuplicate(jsonSource)) {
+                                        备份数据到本地("com.xunmeng.pinduoduo", 实际_分身id, jsonSource);
+                                        上传数据到服务器(jsonSource, 安全的网址变量, "PDD-Hook-Client");
+                                    }
+
+                                    // 篡改逻辑
+                                    String modifiedJson = 执行数据注入与标题篡改逻辑(jsonSource);
+                                    if (!modifiedJson.equals(jsonSource)) {
+                                        param.args[0] = modifiedJson; // 👑 直接掉包构造函数的输入参数！
+                                        log2(" 🎉 [JSON源头劫持] 成功掉包原生 JSONObject 初始化入参！界面即将强制改变！", true);
+                                    }
+                                }
+                            }
+                        }
+                );
+                log2(" ✅ [JSON源头代理] 全局 JSONObject 动态监测点挂载成功！");
+            } catch (Throwable t) {
+                log2(" ⚠️ [JSON源头代理] 挂载失败（可能无权限或已被加固）: " + t.getMessage());
+            }
+
+
+            // =================================================================
+            // 🔒【策略二：传统通道】保持原有的网络 Hook，但升级为地毯式无差别全洗
+            // =================================================================
+            XposedHelpers.findAndHookMethod(
+                    "com.xunmeng.basiccomponent.titan.api.TitanApiCall$1",
+                    lpparam.classLoader,
+                    "onResponse",
+                    "com.xunmeng.basiccomponent.titan.api.TitanApiRequest",
+                    int.class,
+                    String.class,
+                    "com.xunmeng.basiccomponent.titan.api.TitanApiResponse",
+                    int.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                            Object titanApiRequest = param.args[0];
+                            Object titanApiResponse = param.args[3];
+
+                            if (titanApiRequest != null && titanApiResponse != null) {
+                                String url = null;
+                                try {
+                                    url = (String) XposedHelpers.callMethod(titanApiRequest, "getUrl");
+                                } catch (Throwable t) {
+                                    for (java.lang.reflect.Method m : titanApiRequest.getClass().getDeclaredMethods()) {
+                                        if (m.getReturnType() == String.class && m.getParameterTypes().length == 0) {
+                                            String testUrl = (String) m.invoke(titanApiRequest);
+                                            if (testUrl != null && (testUrl.startsWith("http") || testUrl.contains("api"))) {
+                                                url = testUrl;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (url == null) return;
+
+                                boolean 是详情接口 = url.contains("/api/oak/integration/render");
+                                boolean 是收藏接口 = url.contains("recommendation/favorite") || url.contains("favorite");
+                                boolean 是列表接口 = url.contains("api/caterham/v3/query/personal");
+
+                                if (是详情接口 || 是收藏接口 || 是列表接口) {
+                                    byte[] bodyBytes = null;
+                                    try {
+                                        bodyBytes = (byte[]) XposedHelpers.callMethod(titanApiResponse, "getBodyBytes");
+                                    } catch (Throwable t) {
+                                        for (java.lang.reflect.Method m : titanApiResponse.getClass().getDeclaredMethods()) {
+                                            if (m.getReturnType() == byte[].class && m.getParameterTypes().length == 0) {
+                                                m.setAccessible(true);
+                                                bodyBytes = (byte[]) m.invoke(titanApiResponse);
+                                                if (bodyBytes != null && bodyBytes.length > 0) break;
+                                            }
+                                        }
+                                    }
+
+                                    if (bodyBytes == null || bodyBytes.length == 0) return;
+
+                                    String json = new String(bodyBytes, "UTF-8");
+                                    if (json.isEmpty()) return;
+
+                                    if (json.contains("goods_id") || json.contains("goods_list") || json.contains("fav_goods_hash")) {
+                                        String 篡改后的Json = 执行数据注入与标题篡改逻辑(json);
+
+                                        if (!篡改后的Json.equals(json)) {
+                                            byte[] finalBytes = 篡改后的Json.getBytes("UTF-8");
+                                            // 执行地毯式全洗
+                                            地毯式无差别洗牌响应对象(titanApiResponse, finalBytes, 篡改后的Json);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+            );
+
+            log2(" ✅ [Titan网络] 双核重载响应劫持引擎挂载就绪！", true);
+        } catch (Throwable e) {
+            log2(" ❌ [Titan网络] 挂载异常: " + e.getMessage(), true);
+        }
+    }
+
+    // 核心业务公共逻辑
+    private String 执行数据注入与标题篡改逻辑(String jsonSource) {
+        try {
+            String[] 动态配置结果 = 读取动态配置_带ID("com.xunmeng.pinduoduo", 实际_分身id);
+            String 目标网址_集 = "";
+            String 提取商品ID_集 = "";
+            boolean 配置有效 = false;
+
+            if (动态配置结果 != null && 动态配置结果[0] != null && !动态配置结果[0].isEmpty() && 动态配置结果[1] != null && !动态配置结果[1].isEmpty()) {
+                目标网址_集 = 动态配置结果[0];
+                提取商品ID_集 = 动态配置结果[1];
+                配置有效 = true;
+            }
+
+            org.json.JSONObject 根节点 = new org.json.JSONObject(jsonSource);
+            boolean 修改过 = false;
+
+            // 结构一：收藏
+            if (根节点.has("goods_list")) {
+                org.json.JSONArray 商品列表 = 根节点.getJSONArray("goods_list");
+                if (商品列表.length() > 0) {
+                    org.json.JSONObject 单个商品 = 商品列表.getJSONObject(0);
+                    统一篡改单商品数据(单个商品, 配置有效, 提取商品ID_集, 目标网址_集, "goods_id", "mall_info.mall_name");
+                    if (单个商品.has("mall_info")) 单个商品.getJSONObject("mall_info").put("mall_name", "🔥[Hook激活-收藏店]");
+                    单个商品.put("goods_name", "🔥[Hook激活-收藏商品] " + 单个商品.optString("goods_name"));
+                    修改过 = true;
+                }
+            }
+
+            // 结构二：推荐
+            if (根节点.has("list")) {
+                org.json.JSONArray 推荐列表 = 根节点.getJSONArray("list");
+                if (推荐列表.length() > 0) {
+                    org.json.JSONObject 商品0 = 推荐列表.getJSONObject(0);
+                    统一篡改单商品数据(商品0, 配置有效, 提取商品ID_集, 目标网址_集, "id", "sales_tip");
+                    商品0.put("goods_name", "🔥[Hook激活-推荐商品0] " + 商品0.optString("goods_name"));
+                    修改过 = true;
+                }
+            }
+
+            // 结构三：详情
+            if (根节点.has("data")) {
+                org.json.JSONObject data节点 = 根节点.getJSONObject("data");
+                if (data节点.has("goods_list")) {
+                    org.json.JSONArray 商品列表 = data节点.getJSONArray("goods_list");
+                    if (商品列表.length() > 0) {
+                        org.json.JSONObject 外层商品 = 商品列表.getJSONObject(0);
+                        if (外层商品.has("data")) {
+                            org.json.JSONObject 核心数据 = 外层商品.getJSONObject("data");
+                            统一篡改单商品数据(核心数据, 配置有效, 提取商品ID_集, 目标网址_集, "goods_id", "goods_name");
+                            核心数据.put("goods_name", "🔥[Hook激活-详情大标题] " + 核心数据.optString("goods_name"));
+                            外层商品.put("data", 核心数据);
+                            商品列表.put(0, 外层商品);
+                            修改过 = true;
+                        }
+                    }
+                    if (修改过) {
+                        data节点.put("goods_list", 商品列表);
+                        根节点.put("data", data节点);
+                    }
+                }
+            }
+
+            return 修改过 ? 根节点.toString() : jsonSource;
+        } catch (Throwable t) {
+            return jsonSource;
+        }
+    }
+
+    // 彻底全洗：只要类型匹配，不管叫什么名字，全部换成篡改后的数据
+    private void 地毯式无差别洗牌响应对象(Object responseObj, byte[] finalBytes, String jsonStr) {
+        try {
+            XposedHelpers.callMethod(responseObj, "setBodyBytes", new Object[]{finalBytes});
+        } catch (Throwable ignored) {}
+
+        try {
+            Class<?> clazz = responseObj.getClass();
+            while (clazz != null && clazz != Object.class) {
+                // 1. 洗方法
+                for (java.lang.reflect.Method m : clazz.getDeclaredMethods()) {
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (pts.length == 1 && pts[0] == byte[].class) {
+                        try { m.setAccessible(true); m.invoke(responseObj, new Object[]{finalBytes}); } catch (Throwable ignored) {}
+                    }
+                }
+                // 2. 洗所有属性变量 (地毯式覆盖)
+                for (java.lang.reflect.Field field : clazz.getDeclaredFields()) {
+                    field.setAccessible(true);
+                    // 只要变量类型是字节数组，全洗！
+                    if (field.getType() == byte[].class) {
+                        try { field.set(responseObj, finalBytes); } catch (Throwable ignored) {}
+                    }
+                    // 只要变量类型是字符串且内容长得像 JSON，全洗！
+                    if (field.getType() == String.class) {
+                        try {
+                            String oldStr = (String) field.get(responseObj);
+                            if (oldStr != null && (oldStr.startsWith("{") || oldStr.contains("goods_id"))) {
+                                field.set(responseObj, jsonStr);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                    // 强洗压缩标志
+                    if (field.getType() == boolean.class) {
+                        String name = field.getName().toLowerCase();
+                        if (name.contains("gzip") || name.contains("compress")) {
+                            try { field.setBoolean(responseObj, false); } catch (Throwable ignored) {}
+                        }
+                    }
+                }
+                clazz = clazz.getSuperclass();
+            }
+            log2(" 🎉 [Titan深度回填] 属性/方法全深度洗牌完成！");
+        } catch (Throwable t) {
+            log2(" ❌ [Titan深度回填] 发生致命错误: " + t.getMessage());
+        }
+    }
+
+
+
+
+
+
+
+
     private void 独立模块_解密Titan网络响应为明文(final LoadPackageParam lpparam) {
         try {
             log2(" 🚀 [Titan网络] 开始挂载 TitanApiCall 响应明文修复器...", true);
@@ -1094,7 +1351,7 @@ public class HookModule implements IXposedHookLoadPackage {
                 } else {
                     单个商品.put(店名键名, 新店名);
                 }
-                log2(" ✍️ [公共模块] 已修改位置 [" + 店名键名 + "] 为: " + 新店名);
+                log2(" ✍️ [公共模块] 已修改位置A [" + 店名键名 + "] 为: " + 新店名);
             }
 
             // 🌟 【新增逻辑】独立判定：如果包含 list_title 键，则在其内容后追加 +V1.8
