@@ -82,7 +82,9 @@ public class MainActivity extends AppCompatActivity {
             StringBuilder 变量_配置信息 = new StringBuilder();
 
             // 直接从 HookModule 获取全局变量
-            //String 变量_淘宝尾缀 = HookModule.TAOBAO_尾缀;
+
+           //String 变量_淘宝尾缀 = HookModule.getTaobaoSuffix();
+
             String 变量_淘宝尾缀 = "测试";
             变量_配置信息.append("🔑 淘宝尾缀：\n").append(变量_淘宝尾缀);
             变量_API配置文本.setText(变量_配置信息.toString());
@@ -90,7 +92,9 @@ public class MainActivity extends AppCompatActivity {
             变量_API配置文本.setText("❌ 读取失败：" + e.getMessage());
         }
     }
-
+    public static String 要回传的方法() {
+        return "是是是";
+    }
     private void 显示设备信息() {
         // 获取设备序列号
         String 变量_序列号 = Build.SERIAL;
@@ -227,14 +231,15 @@ public class MainActivity extends AppCompatActivity {
             }
 
             // 创建淘宝示例配置
-            String 变量_淘宝示例 = "apikey=YOUR_KEY&uuid=YOUR_UUID&itemId=YOUR_ITEM_ID&username=YOUR_NAME&ids=DEVICE_ID&pt=淘宝&fs=0";
+            String 变量_淘宝示例 = "apikey=YOUR_KE";
             File 变量_淘宝文件 = new File(变量_配置目录对象, "com.taobao.taobao_0.txt");
             if (!变量_淘宝文件.exists()) {
                 writeFile(变量_淘宝文件, 变量_淘宝示例);
             }
 
+
             // 创建拼多多示例配置
-            String 变量_拼多多示例 = "apikey=YOUR_KEY&uuid=YOUR_UUID&itemId=YOUR_ITEM_ID&username=YOUR_NAME&ids=DEVICE_ID&pt=duoduo&fs=0";
+            String 变量_拼多多示例 = "apikey=YOUR_s";
             File 变量_拼多多文件 = new File(变量_配置目录对象, "com.xunmeng.pinduoduo_0.txt");
             if (!变量_拼多多文件.exists()) {
                 writeFile(变量_拼多多文件, 变量_拼多多示例);
