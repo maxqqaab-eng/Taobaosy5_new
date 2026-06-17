@@ -108,16 +108,27 @@ public class HookModule implements IXposedHookLoadPackage {
                     HookModule.多多账号名_集= 文本_取出中间文本(HookModule.多多_尾缀,"username=","&",null,true);
                 }
             }
+            String 模式选择 = "新版本";
+            if (多多_尾缀 != null && 多多_尾缀.indexOf("芝麻公司") != -1){
+                模式选择 = "老版本";
+                log2(" ✅老版本", true);
+            } else {
+                模式选择 = "新版本";
+                 log2(" ❌ 新版本: ", true);
+            }
 
             纯静默检测敏感类(lpparam);
             独立模块_测试泰坦网络拦截(lpparam);
             独立模块_屏蔽WiFi网络关联探测(lpparam);
 
             log2(" ✅ 开始处理拼多多应用，进程: " + processName);
+            if ("老版本".equals(模式选择)) {
+                 独立模块_解密Titan网络响应为明文(lpparam);
 
+             }
+             else{hookPinduoduo(lpparam);}
 
-
-            hookPinduoduo(lpparam);
+            //
         } else {
            // log2(" ❌ 非目标应用，跳过处理b: " + packageName);
         }
@@ -804,6 +815,107 @@ public class HookModule implements IXposedHookLoadPackage {
             log2(" ❌ 异常详情CC: " + t.getClass().getName() + ": " + t.getMessage(),true);
         }
     }
+
+
+
+
+
+
+
+
+    private void 独立模块_解密Titan网络响应为明文(final LoadPackageParam lpparam) {
+        try {
+            log2(" 🚀 [Titan网络] 开始挂载 TitanApiCall 响应明文修复器...", true);
+
+            XposedHelpers.findAndHookMethod(
+                    "com.xunmeng.basiccomponent.titan.api.TitanApiCall$1",
+                    lpparam.classLoader,
+                    "onResponse",
+                    "com.xunmeng.basiccomponent.titan.api.TitanApiRequest",
+                    int.class,
+                    String.class,
+                    "com.xunmeng.basiccomponent.titan.api.TitanApiResponse",
+                    int.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                            Object titanApiRequest = param.args[0];
+                            Object titanApiResponse = param.args[3];
+
+                            if (titanApiRequest != null && titanApiResponse != null) {
+                                String url = (String) XposedHelpers.callMethod(titanApiRequest, "getUrl");
+
+                                // 🎯 精确过滤目标 URL
+                                if (url != null && url.contains("/api/oak/integration/render")) {
+                                    log2(" 🔔 [Titan网络] 捕获到目标加密/压缩网络响应！URL: " + url, true);
+
+                                    // 1. 拿到原始的字节流
+                                    byte[] bodyBytes = (byte[]) XposedHelpers.callMethod(titanApiResponse, "getBodyBytes");
+
+                                    if (bodyBytes != null) {
+                                        // 2. 🛡️ 【标准 Xposed 安全判定机制】判定是否为 Gzip 压缩
+                                        boolean isGzip = false;
+
+                                        // 尝试读取拼写错误的字段 isGizpCompressed
+                                        try {
+                                            isGzip = XposedHelpers.getBooleanField(titanApiResponse, "isGizpCompressed");
+                                        } catch (Throwable ignored) {
+                                            // 如果找不到，尝试读取拼写正确的字段 isGzipCompressed
+                                            try {
+                                                isGzip = XposedHelpers.getBooleanField(titanApiResponse, "isGzipCompressed");
+                                            } catch (Throwable ignored2) {
+                                                // 两个都没找到，说明字段被重新混淆了，默认当作普通数据或退回原逻辑
+                                            }
+                                        }
+
+                                        // 3. 如果是 Gzip，强行解压并还原为明文
+                                        if (isGzip) {
+                                            Class<?> unzipUtil = XposedHelpers.findClass("com.xunmeng.basekit.util.p", lpparam.classLoader);
+                                            byte[] unzippedBytes = (byte[]) XposedHelpers.callStaticMethod(unzipUtil, "b", new Object[]{bodyBytes});
+
+                                            if (unzippedBytes != null) {
+                                                // 把解压后的“纯明文 JSON 字节流”重新塞回响应体
+                                                XposedHelpers.callMethod(titanApiResponse, "setBodyBytes", new Object[]{unzippedBytes});
+
+                                                // 🌟 强行将 Gzip 压缩标志位强行设置为 false
+                                                try { XposedHelpers.setBooleanField(titanApiResponse, "isGizpCompressed", false); } catch (Throwable ignored) {}
+                                                try { XposedHelpers.setBooleanField(titanApiResponse, "isGzipCompressed", false); } catch (Throwable ignored) {}
+
+                                                log2(" 🎉 [Titan网络] 目标 Gzip 响应已成功强行解压并还原为 [纯明文 JSON] 投递给业务层！", true);
+
+                                                // 🌟【新增逻辑】打印解压后的 JSON 明文
+                                                try {
+                                                    String jsonStr = new String(unzippedBytes, "UTF-8");
+                                                    log2(" 📄 [Titan JSON(Gzip解压后)]:\n" + jsonStr, true);
+                                                } catch (Throwable t) {
+                                                    log2(" ❌ [Titan网络] 解压后转 JSON 字符串失败: " + t.getMessage(), true);
+                                                }
+                                            }
+                                        } else {
+                                            log2(" ℹ️ [Titan网络] 该响应本身就是明文，无需解压，直接放行给业务层处理", true);
+
+                                            // 🌟【新增逻辑】本身是明文时直接打印 JSON
+                                            try {
+                                                String jsonStr = new String(bodyBytes, "UTF-8");
+                                                log2(" 📄 [Titan JSON(原始明文)]:\n" + jsonStr, true);
+                                            } catch (Throwable t) {
+                                                log2(" ❌ [Titan网络] 原始明文转 JSON 字符串失败: " + t.getMessage(), true);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+            );
+
+            log2(" ✅ [Titan网络] 响应明文修复器挂载成功！", true);
+        } catch (Throwable e) {
+            log2(" ❌ [Titan网络] 模块挂载异常 (可能混淆类名变动): " + e.getMessage(), true);
+        }
+    }
+
+
 
 
 
