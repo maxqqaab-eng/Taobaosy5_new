@@ -51,7 +51,7 @@ public class HookModule implements IXposedHookLoadPackage {
         log2("初始化"+软件版本+">"+日志开关_集,true);
 
 
-        if (packageName.contains("taobao") || packageName.contains("pinduoduo")) {
+        if (packageName.contains("taobao") || packageName.contains("pinduoduo")|| packageName.contains("jingdong")) {
             log2("发现目标相关应用: " + packageName+"分身id:"+实际_分身id);
         }
 
@@ -117,10 +117,10 @@ public class HookModule implements IXposedHookLoadPackage {
                  log2(" ❌ 新版本: ", true);
             }
 
-            //纯静默检测敏感类(lpparam);
+            纯静默检测敏感类(lpparam);
            // 独立模块_测试泰坦网络拦截(lpparam);
             独立模块_屏蔽WiFi网络关联探测(lpparam);
-            模式选择="老版本";
+            模式选择="新版本";
             log2(" ✅ 开始处理拼多多应用，进程: " + processName);
             if ("老版本".equals(模式选择)) {
                 独立模块_直接处理Titan明文网络响应并执行上传与篡改(lpparam);
@@ -129,7 +129,13 @@ public class HookModule implements IXposedHookLoadPackage {
              else{hookPinduoduo(lpparam);}
 
             //
-        } else {
+        } else if ("com.jingdong.app.mall".equals(packageName))
+         {
+             京东纯静默检测敏感类(lpparam);
+             testGlobalParser(lpparam);
+             log2(" ✅京东的", true);
+        }
+        else {
            // log2(" ❌ 非目标应用，跳过处理b: " + packageName);
         }
 
@@ -822,8 +828,6 @@ public class HookModule implements IXposedHookLoadPackage {
 
 
 
-
-
     private void 独立模块_直接处理Titan明文网络响应并执行上传与篡改(final LoadPackageParam lpparam) {
         try {
             log2(" 🚀 [Titan网络] 开始挂载纯明文核心业务拦截引擎...", true);
@@ -837,7 +841,7 @@ public class HookModule implements IXposedHookLoadPackage {
                     + "&sjpt=" + 实际_平台 + "&sjfsid=" + 实际_分身id + "&sbxlhxn=" + 设备序列号_虚拟 + "&ver=" + 软件版本;
 
             // =================================================================
-            // 🔥【策略一：黄金防线】直接全局 Hook JSONObject 源头解析（降维打击）
+            // 🔥【策略一：黄金防线】全局 JSONObject 源头解析（极速优化版）
             // =================================================================
             try {
                 XposedHelpers.findAndHookConstructor(
@@ -847,37 +851,44 @@ public class HookModule implements IXposedHookLoadPackage {
                         new XC_MethodHook() {
                             @Override
                             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+
                                 String jsonSource = (String) param.args[0];
-                                if (jsonSource == null || jsonSource.isEmpty()) return;
+                                if (jsonSource == null) return;
 
-                                // 🎯 精准识别目标接口的数据特征（看是否包含对应业务特有字段）
-                                if (jsonSource.contains("goods_id") && (jsonSource.contains("goods_list") || jsonSource.contains("fav_goods_hash") || jsonSource.contains("using_secondary_bottom_section_order"))) {
-                                    log2(" 🎯 [JSON源头劫持] 检测到应用正在解析目标业务数据，正在实施底层拦截...", true);
+                                int length = jsonSource.length();
+                                // ⚡ 优化点 1：体积硬筛选。详情和列表接口的 JSON 通常很大，过滤掉小于 1500 字节的常规配置/埋点包
+                                if (length < 132) return;
 
+                                // ⚡ 优化点 2：高频核心字段快筛，避免盲目进行多重复杂判定
+                                if (!jsonSource.contains("goods_id")) return;
+
+                                // 精准识别目标接口的数据特征
+                                if (jsonSource.contains("goods_list") || jsonSource.contains("fav_goods_hash") || jsonSource.contains("using_secondary_bottom_section_order")) {
+                                   // log2(" ✅ [JSON源头] 这里呢@@@@@@@@@@@！",true);
                                     // 上传逻辑
                                     if (jsonSource.contains("using_secondary_bottom_section_order") && !isDuplicate(jsonSource)) {
                                         备份数据到本地("com.xunmeng.pinduoduo", 实际_分身id, jsonSource);
-                                        上传数据到服务器(jsonSource, 安全的网址变量, "PDD-Hook-Client");
+                                       // 上传数据到服务器(jsonSource, 安全的网址变量, "PDD-Hook-Client");
                                     }
 
                                     // 篡改逻辑
                                     String modifiedJson = 执行数据注入与标题篡改逻辑(jsonSource);
                                     if (!modifiedJson.equals(jsonSource)) {
-                                        param.args[0] = modifiedJson; // 👑 直接掉包构造函数的输入参数！
-                                        log2(" 🎉 [JSON源头劫持] 成功掉包原生 JSONObject 初始化入参！界面即将强制改变！", true);
+                                       // param.args[0] = modifiedJson; // 👑 直接掉包
+                                        log2(" 🎉 [JSON源头劫持] 极速判定成功，掉包完成！文本大小: " + length, true);
                                     }
                                 }
                             }
                         }
                 );
-                log2(" ✅ [JSON源头代理] 全局 JSONObject 动态监测点挂载成功！");
+                log2(" ✅ [JSON源头代理] 全局极速版 JSONObject 监测点挂载成功！");
             } catch (Throwable t) {
-                log2(" ⚠️ [JSON源头代理] 挂载失败（可能无权限或已被加固）: " + t.getMessage());
+                log2(" ⚠️ [JSON源头代理] 挂载失败: " + t.getMessage());
             }
 
 
             // =================================================================
-            // 🔒【策略二：传统通道】保持原有的网络 Hook，但升级为地毯式无差别全洗
+            // 🔒【策略二：传统通道】Titan 网络内核 Hook（修正 Bug 并精简日志版）
             // =================================================================
             XposedHelpers.findAndHookMethod(
                     "com.xunmeng.basiccomponent.titan.api.TitanApiCall$1",
@@ -890,7 +901,7 @@ public class HookModule implements IXposedHookLoadPackage {
                     int.class,
                     new XC_MethodHook() {
                         @Override
-                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                             Object titanApiRequest = param.args[0];
                             Object titanApiResponse = param.args[3];
 
@@ -916,6 +927,11 @@ public class HookModule implements IXposedHookLoadPackage {
                                 boolean 是收藏接口 = url.contains("recommendation/favorite") || url.contains("favorite");
                                 boolean 是列表接口 = url.contains("api/caterham/v3/query/personal");
 
+                                // 🎯【已修复】去除了原先的 赋值Bug（=true），改为了正常的条件记录且只在真正匹配时打印
+                                if (是收藏接口) {
+                                    log2(" ✅ [Titan网络] 成功捕获到收藏业务网络接口 ", true);
+                                }
+
                                 if (是详情接口 || 是收藏接口 || 是列表接口) {
                                     byte[] bodyBytes = null;
                                     try {
@@ -931,6 +947,9 @@ public class HookModule implements IXposedHookLoadPackage {
                                     }
 
                                     if (bodyBytes == null || bodyBytes.length == 0) return;
+
+                                    // ⚡ 优化点 3：网络层流对象大小过筛，小于 1500 字节的业务包直接不转 String，防卡顿
+                                    if (bodyBytes.length < 1500) return;
 
                                     String json = new String(bodyBytes, "UTF-8");
                                     if (json.isEmpty()) return;
@@ -950,7 +969,7 @@ public class HookModule implements IXposedHookLoadPackage {
                     }
             );
 
-            log2(" ✅ [Titan网络] 双核重载响应劫持引擎挂载就绪！", true);
+            log2(" ✅ [Titan网络] 双核重载劫持引擎平滑优化版就绪！", true);
         } catch (Throwable e) {
             log2(" ❌ [Titan网络] 挂载异常: " + e.getMessage(), true);
         }
@@ -979,8 +998,8 @@ public class HookModule implements IXposedHookLoadPackage {
                 if (商品列表.length() > 0) {
                     org.json.JSONObject 单个商品 = 商品列表.getJSONObject(0);
                     统一篡改单商品数据(单个商品, 配置有效, 提取商品ID_集, 目标网址_集, "goods_id", "mall_info.mall_name");
-                    if (单个商品.has("mall_info")) 单个商品.getJSONObject("mall_info").put("mall_name", "🔥[Hook激活-收藏店]");
-                    单个商品.put("goods_name", "🔥[Hook激活-收藏商品] " + 单个商品.optString("goods_name"));
+                    if (单个商品.has("mall_info")) 单个商品.getJSONObject("mall_info").put("mall_name", "🔥[激活B-收藏店]"+软件版本);
+                    单个商品.put("goods_name", "🔥[激活A-列表商品] "+软件版本 + 单个商品.optString("goods_name"));
                     修改过 = true;
                 }
             }
@@ -991,7 +1010,7 @@ public class HookModule implements IXposedHookLoadPackage {
                 if (推荐列表.length() > 0) {
                     org.json.JSONObject 商品0 = 推荐列表.getJSONObject(0);
                     统一篡改单商品数据(商品0, 配置有效, 提取商品ID_集, 目标网址_集, "id", "sales_tip");
-                    商品0.put("goods_name", "🔥[Hook激活-推荐商品0] " + 商品0.optString("goods_name"));
+                    商品0.put("goods_name", "🔥[激活C-推荐商品0] " +软件版本+ 商品0.optString("goods_name"));
                     修改过 = true;
                 }
             }
@@ -1006,7 +1025,7 @@ public class HookModule implements IXposedHookLoadPackage {
                         if (外层商品.has("data")) {
                             org.json.JSONObject 核心数据 = 外层商品.getJSONObject("data");
                             统一篡改单商品数据(核心数据, 配置有效, 提取商品ID_集, 目标网址_集, "goods_id", "goods_name");
-                            核心数据.put("goods_name", "🔥[Hook激活-详情大标题] " + 核心数据.optString("goods_name"));
+                            核心数据.put("goods_name", "🔥[激活D-详情大标题] " + 核心数据.optString("goods_name"));
                             外层商品.put("data", 核心数据);
                             商品列表.put(0, 外层商品);
                             修改过 = true;
@@ -1025,7 +1044,7 @@ public class HookModule implements IXposedHookLoadPackage {
         }
     }
 
-    // 彻底全洗：只要类型匹配，不管叫什么名字，全部换成篡改后的数据
+    // 彻底全洗：移除高频刷屏无用日志
     private void 地毯式无差别洗牌响应对象(Object responseObj, byte[] finalBytes, String jsonStr) {
         try {
             XposedHelpers.callMethod(responseObj, "setBodyBytes", new Object[]{finalBytes});
@@ -1041,14 +1060,12 @@ public class HookModule implements IXposedHookLoadPackage {
                         try { m.setAccessible(true); m.invoke(responseObj, new Object[]{finalBytes}); } catch (Throwable ignored) {}
                     }
                 }
-                // 2. 洗所有属性变量 (地毯式覆盖)
+                // 2. 洗所有属性变量
                 for (java.lang.reflect.Field field : clazz.getDeclaredFields()) {
                     field.setAccessible(true);
-                    // 只要变量类型是字节数组，全洗！
                     if (field.getType() == byte[].class) {
                         try { field.set(responseObj, finalBytes); } catch (Throwable ignored) {}
                     }
-                    // 只要变量类型是字符串且内容长得像 JSON，全洗！
                     if (field.getType() == String.class) {
                         try {
                             String oldStr = (String) field.get(responseObj);
@@ -1057,7 +1074,6 @@ public class HookModule implements IXposedHookLoadPackage {
                             }
                         } catch (Throwable ignored) {}
                     }
-                    // 强洗压缩标志
                     if (field.getType() == boolean.class) {
                         String name = field.getName().toLowerCase();
                         if (name.contains("gzip") || name.contains("compress")) {
@@ -1067,13 +1083,10 @@ public class HookModule implements IXposedHookLoadPackage {
                 }
                 clazz = clazz.getSuperclass();
             }
-            log2(" 🎉 [Titan深度回填] 属性/方法全深度洗牌完成！");
         } catch (Throwable t) {
-            log2(" ❌ [Titan深度回填] 发生致命错误: " + t.getMessage());
+            // 静默处理，防止日志刷屏
         }
     }
-
-
 
 
 
@@ -1645,11 +1658,82 @@ public class HookModule implements IXposedHookLoadPackage {
 
 
 
+    // ========== Gson 与 JSONObject 纯数据流量联合测试模块 ====================
+    private void testGlobalParser(final LoadPackageParam lpparam) {
+        String processName = lpparam.processName;
+        // 过滤掉完全不相干的系统常驻后台进程，防止无效日志泛滥
+        if (processName == null || processName.contains(":providers") || processName.contains(":channel")) {
+            return;
+        }
 
+        // -----------------------------------------------------------------
+        // 📊 监测通道 A：监控 com.google.gson.Gson
+        // -----------------------------------------------------------------
+        try {
+            Class<?> gsonClass = XposedHelpers.findClass("com.google.gson.Gson", lpparam.classLoader);
+            XposedHelpers.findAndHookMethod(gsonClass,
+                    "fromJson",
+                    String.class,
+                    java.lang.reflect.Type.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                            String jsonSource = (String) param.args[0];
+                            if (jsonSource == null) return;
 
+                            int length = jsonSource.length();
 
+                            // ⚡ 核心测试筛选：只允许大于 300 字节的数据通过
+                            if (length > 300) {
+                                log2(" 📈 [Gson流量] 进程: " + lpparam.processName + " | 大小: " + length + " 字节", true);
 
+                                int previewLength = Math.min(200, length);
+                                log2(" 📄 [Gson预览]: " + jsonSource.substring(0, previewLength), true);
 
+                                // 如果需要看完整数据，解开下面这行注释：
+                                // log2(" 📝 [Gson完整]: " + jsonSource, true);
+                            }
+                        }
+                    });
+            log2(" 🎯 [测试引擎] 成功挂载 Gson 流量监控点！", true);
+        } catch (Throwable t) {
+            log2(" ⚠️ [测试引擎] 挂载 Gson 监控失败 (当前App可能未集成标准Gson): " + t.getMessage());
+        }
+
+        // -----------------------------------------------------------------
+        // 📊 监测通道 B：监控 org.json.JSONObject
+        // -----------------------------------------------------------------
+        try {
+            XposedHelpers.findAndHookConstructor(
+                    "org.json.JSONObject",
+                    lpparam.classLoader,
+                    String.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                            String jsonSource = (String) param.args[0];
+                            if (jsonSource == null) return;
+
+                            int length = jsonSource.length();
+
+                            // ⚡ 核心测试筛选：同样只允许大于 300 字节的数据通过
+                            if (length > 300) {
+                                log2(" 📉 [JSON源头流量] 进程: " + lpparam.processName + " | 大小: " + length + " 字节", true);
+
+                                int previewLength = Math.min(200, length);
+                                log2(" 📄 [JSON预览]: " + jsonSource.substring(0, previewLength), true);
+
+                                // 如果需要看完整数据，解开下面这行注释：
+                                // log2(" 📝 [JSON完整]: " + jsonSource, true);
+                            }
+                        }
+                    }
+            );
+            log2(" 🎯 [测试引擎] 成功挂载 JSONObject 源头流量监控点！", true);
+        } catch (Throwable t) {
+            log2(" ⚠️ [测试引擎] 挂载 JSONObject 监控失败: " + t.getMessage());
+        }
+    }
 
 
 
@@ -1916,6 +2000,30 @@ public class HookModule implements IXposedHookLoadPackage {
     }
 
 
+    private void 京东纯静默检测敏感类(LoadPackageParam lpparam) {
+        log2(" 🕵️‍♂️ [开始检测] 正在静默扫描敏感安全类，判定环境安全性...", true);
+
+        // 待检测的类名清单
+        String[] 敏感类列表 = {
+                "com.google.gson.Gson",
+                "org.json.JSONObject",
+
+        };
+
+        for (String 类名 : 敏感类列表) {
+            try {
+                // 纯粹加载类，不执行任何 Hook 动作
+                Class<?> 探测结果 = XposedHelpers.findClass(类名, lpparam.classLoader);
+                if (探测结果 != null) {
+                    log2(" 🟢 [存在] 发现敏感类: " + 类名, true);
+                }
+            } catch (Throwable 忽略) {
+                // 绝不抛出异常，绝不留痕，检测不到就默默过去
+                log2(" 🔴 [不存在] 敏感类没有在此进程加载: " + 类名);
+            }
+        }
+        log2(" 🕵️‍♂️ [检测结束] 敏感类扫描完毕。", true);
+    }
 
 
     /**
@@ -1927,7 +2035,7 @@ public class HookModule implements IXposedHookLoadPackage {
         java.io.File 配置文件 = new java.io.File(文件路径);
 
         if (!配置文件.exists()) {
-            log2(" ⚠️ 动态配置文件不存在: " + 文件路径);
+            //log2(" ⚠️ 动态配置文件不存在: " + 文件路径);
             return null;
         }
 
