@@ -30,6 +30,10 @@ public class HookModule implements IXposedHookLoadPackage {
     public static String 多多_尾缀 = "http://ma.132.tv:3079/api/rwb/action=item_upload?apikey=YOUR_API_KEY&uuid=YOUR_UUID&itemId=YOUR_ITEM_ID&username=YOUR_NAME&ids=YOUR_IDS&pt=拼多多&fs=0";
     public static String 测试内容 = null;
     public static String 多多账号名_集 = null;
+    // 京东尾缀：初始为 null，触发首次加载
+    public static String 京东_尾缀 = null;
+    public static String 京东账号名_集 = null;
+
 
 
     @Override
@@ -131,10 +135,24 @@ public class HookModule implements IXposedHookLoadPackage {
             //
         } else if ("com.jingdong.app.mall".equals(packageName))
          {
+             实际_平台="京东";
+
+             // 读取京东配置尾缀
+             京东_尾缀 = 读取apk配置文件(packageName, 实际_分身id);
+             if (HookModule.京东_尾缀 == null || HookModule.京东_尾缀.trim().isEmpty()) {
+                 // 回退到默认值
+                 HookModule.京东_尾缀 = "apikey=ZV63UZRACUUIMF1X&uuid=3880296&itemId=100012043978&username=默认公司_4组&ids=testjingdong&pt=京东&fs=0";
+                 log2(" ⚠️ 使用默认京东尾缀");
+             } else {
+                 log2(" ✅ 成功加载自定义京东尾缀");
+                 HookModule.京东账号名_集 = 文本_取出中间文本(HookModule.京东_尾缀, "username=", "&", null, true);
+             }
+
              京东纯静默检测敏感类(lpparam);
-             testGlobalParser(lpparam);
-             log2(" ✅京东的", true);
+             hookJingdong(lpparam);
+             log2(" ✅京东的，尾缀>" + HookModule.京东_尾缀 + " 设备序列号>" + 设备序列号_虚拟, true);
         }
+
         else {
            // log2(" ❌ 非目标应用，跳过处理b: " + packageName);
         }
@@ -1658,8 +1676,97 @@ public class HookModule implements IXposedHookLoadPackage {
 
 
 
+    // ==================== 京东 Hook ====================
+    private void hookJingdong(final LoadPackageParam lpparam) {
+        String processName = lpparam.processName;
+        log2(" 🎯 开始初始化京东Hook，当前进程: " + processName);
+
+        // 拼接上传 URL（使用京东尾缀）
+        final String targetUrl = "http://ma.132.tv:3079/api/rwb/action=item_upload?" + 京东_尾缀
+                + "&sjpt=" + 实际_平台 + "&sjfsid=" + 实际_分身id + "&sbxlhxn=" + 设备序列号_虚拟 + "&ver=" + 软件版本;
+        log2(" ✅ 使用动态京东URL: " + targetUrl);
+
+        // -----------------------------------------------------------------
+        // 📊 通道 A：Hook com.google.gson.Gson.fromJson(String, Type)
+        // -----------------------------------------------------------------
+        try {
+            Class<?> gsonClass = XposedHelpers.findClass("com.google.gson.Gson", lpparam.classLoader);
+            XposedHelpers.findAndHookMethod(gsonClass,
+                    "fromJson",
+                    String.class,
+                    java.lang.reflect.Type.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                            String json = (String) param.args[0];
+                            京东处理JSON数据(json, targetUrl);
+                        }
+                    });
+            log2(" ✅ 京东 Gson Hook 设置完毕", true);
+        } catch (Throwable t) {
+            log2(" ⚠️ 京东 Gson Hook 设置失败: " + t.getMessage(), true);
+        }
+
+        // -----------------------------------------------------------------
+        // 📊 通道 B：Hook org.json.JSONObject 构造方法（源头拦截）
+        // -----------------------------------------------------------------
+        try {
+            XposedHelpers.findAndHookConstructor(
+                    "org.json.JSONObject",
+                    lpparam.classLoader,
+                    String.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                            String json = (String) param.args[0];
+                            京东处理JSON数据(json, targetUrl);
+                        }
+                    }
+            );
+            log2(" ✅ 京东 JSONObject Hook 设置完毕", true);
+        } catch (Throwable t) {
+            log2(" ⚠️ 京东 JSONObject Hook 设置失败: " + t.getMessage(), true);
+        }
+    }
+
+    // 🌟 京东 JSON 数据识别 + 去重 + 上传
+    private void 京东处理JSON数据(String json, String targetUrl) {
+        try {
+            if (json == null) return;
+
+            int jsonLength = json.length();
+            // 体积硬筛选：商品详情 JSON 通常较大，过滤掉小数据包
+            if (jsonLength < 500) return;
+
+            // 高频核心字段快筛
+            boolean 包含商品标识 = json.contains("skuId") || json.contains("\"sku\"") || json.contains("wareId");
+            if (!包含商品标识) return;
+
+            // 京东商品详情特征字段判定
+            boolean 是商品详情 = json.contains("wareInfo")
+                    || json.contains("wareBusiness")
+                    || json.contains("materialServiceCharge")
+                    || (json.contains("skuId") && json.contains("shopInfo"))
+                    || (json.contains("wareId") && json.contains("商品"));
+
+            if (是商品详情) {
+                log2(" ✅ [京东] 命中商品详情数据，长度: " + jsonLength, true);
+                if (!isDuplicate(json)) {
+                    log2(" 🚀 [京东] 开始上传数据，长度: " + jsonLength, true);
+                    备份数据到本地("com.jingdong.app.mall", 实际_分身id, json);
+                    上传数据到服务器(json, targetUrl, "JD-Hook-Client");
+                } else {
+                    log2(" ⏭️ [京东] 数据重复，跳过上传");
+                }
+            }
+        } catch (Throwable t) {
+            log2(" ❌ [京东] 处理JSON数据异常: " + t.getMessage());
+        }
+    }
+
     // ========== Gson 与 JSONObject 纯数据流量联合测试模块 ====================
     private void testGlobalParser(final LoadPackageParam lpparam) {
+
         String processName = lpparam.processName;
         // 过滤掉完全不相干的系统常驻后台进程，防止无效日志泛滥
         if (processName == null || processName.contains(":providers") || processName.contains(":channel")) {
